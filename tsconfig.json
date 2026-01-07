@@ -15,20 +15,25 @@
     "isolatedModules": true,
     "noEmit": true,
     "jsx": "react-jsx",
-    "baseUrl": ".",
-    "paths": {
-      "*": ["node_modules/*"]
-    }
+    "baseUrl": "."
   },
   "include": [
     "index.tsx",
     "App.tsx",
     "types.ts",
     "constants.ts",
-    "components/**/*",
-    "pages/**/*",
-    "db/**/*",
-    "domain/**/*"
+    "components/**/*.ts",
+    "components/**/*.tsx",
+    "pages/**/*.ts",
+    "pages/**/*.tsx",
+    "db/**/*.ts",
+    "domain/**/*.ts"
   ],
-  "exclude": ["node_modules", "app", ".next", "dist"]
+  "exclude": [
+    "node_modules",
+    "app",
+    ".next",
+    "dist",
+    "next.config.ts"
+  ]
 }
