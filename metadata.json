@@ -1,6 +1,6 @@
 {
-  "name": "Non Next Fitness Coach MVP",
-  "description": "Advanced adaptive fitness coaching app built with Next.js App Router and Dexie local storage.",
+  "name": "Fitness Coach SPA",
+  "description": "Adaptive fitness coaching app with local Dexie storage and React SPA architecture.",
   "requestFramePermissions": [
     "geolocation"
   ]

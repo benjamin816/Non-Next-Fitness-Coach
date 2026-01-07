@@ -11,7 +11,7 @@ import {
 import { getPlanAchievedDelta, getPlanStatusLabel } from '../domain/planAdherence';
 import { ACTIVITY_TARGETS } from '../constants';
 import { Flame, Footprints, Timer, Weight, Trophy, Sparkles, RefreshCcw, Target, Zap, Dumbbell } from 'lucide-react';
-import Link from 'next/link'; // Changed to next/link
+import { Link } from 'react-router-dom'; // Corrected for SPA
 import CoachBar from '../components/CoachBar';
 
 const TodayPage: React.FC = () => {
@@ -165,7 +165,7 @@ const TodayPage: React.FC = () => {
               <p className="text-yellow-50">You've hit your target weight. Ready for the next phase?</p>
             </div>
             <Link 
-              href="/settings" 
+              to="/settings" 
               className="bg-white text-orange-600 px-6 py-2 rounded-full font-bold flex items-center gap-2 hover:bg-yellow-50 transition shadow-md"
             >
               <RefreshCcw size={18} /> Update Goal

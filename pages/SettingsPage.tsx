@@ -1,6 +1,5 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-// Corrected import path for useStorage
 import { useStorage } from '../components/StorageProvider';
 import { UserProfile, GoalSettings, Sex, AdaptiveModel, GoalMode, ActivityStyle } from '../types';
 import { 
@@ -11,12 +10,7 @@ import {
   User, ShieldAlert, Download, Upload, AlertTriangle, 
   Trash2, Target, Settings as SettingsIcon, Zap, Info, ShieldCheck
 } from 'lucide-react';
-import { z } from 'https://esm.sh/zod@^3.24.2';
-
-const profileSchema = z.object({
-  age: z.number().min(16, "This app is for ages 16+."),
-  weight: z.number().min(100, "Min 100lb").max(600, "Max 600lb")
-});
+import { useNavigate } from 'react-router-dom'; // Corrected for SPA
 
 interface SettingsPageProps {
   onReset: () => void;
@@ -24,6 +18,7 @@ interface SettingsPageProps {
 
 const SettingsPage: React.FC<SettingsPageProps> = ({ onReset }) => {
   const storage = useStorage();
+  const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [goals, setGoals] = useState<GoalSettings | null>(null);
@@ -32,7 +27,6 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ onReset }) => {
   const [showOverrideWarning, setShowOverrideWarning] = useState(false);
   const [resetInput, setResetInput] = useState('');
   const [savingGoal, setSavingGoal] = useState(false);
-  const [errors, setErrors] = useState<Record<string, string>>({});
 
   useEffect(() => {
     const fetchData = async () => {
@@ -86,7 +80,6 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ onReset }) => {
   };
 
   const updateProfile = async (updates: Partial<UserProfile>) => {
-    setErrors({});
     const updated = { ...profile, ...updates, updatedAt: Date.now() };
     setProfile(updated);
     await storage.setUserProfile(updated);
@@ -105,8 +98,6 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ onReset }) => {
     setAdaptive(updated);
     await storage.setAdaptiveModel(updated);
   };
-
-  const { feet, inches } = cmToFeetInches(profile.heightCm);
 
   return (
     <div className="space-y-8 pb-10">
