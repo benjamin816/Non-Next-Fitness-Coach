@@ -14,7 +14,7 @@ import {
 } from '../domain/calculators';
 import { getPlanAchievedDelta } from '../domain/planAdherence';
 import { ACTIVITY_TARGETS } from '../constants';
-import { RefreshCw, Info, ArrowUpRight, ArrowDownRight, Sparkles, Flame, Footprints, Timer, TrendingDown } from 'lucide-react';
+import { RefreshCw, Info, ArrowUpRight, ArrowDownRight, Sparkles, Flame, Footprints, Timer, TrendingDown, Zap } from 'lucide-react';
 
 const ProgressPage: React.FC = () => {
   const storage = useStorage();
@@ -88,8 +88,10 @@ const ProgressPage: React.FC = () => {
 
   if (!profile || !goals || !adaptive || logs.length === 0) return (
     <div className="text-center py-20 flex flex-col items-center space-y-4">
-      <div className="animate-pulse bg-gray-200 w-16 h-16 rounded-full" />
-      <p className="text-gray-500">Waiting for data... Keep logging to see your trends.</p>
+      <div className="animate-spin-slow bg-blue-100 p-3 rounded-full">
+        <RefreshCw size={24} className="text-blue-600" />
+      </div>
+      <p className="text-gray-500 font-medium">Analyzing your journey...</p>
     </div>
   );
 
@@ -170,7 +172,7 @@ const ProgressPage: React.FC = () => {
       <header className="flex justify-between items-start">
         <div>
           <h2 className="text-2xl font-bold">Progress & Trends</h2>
-          <p className="text-gray-500">Visualizing your 7-day rolling performance.</p>
+          <p className="text-gray-500">Visualizing your 7-day rolling averages.</p>
         </div>
         <div className="bg-blue-50 px-3 py-1 rounded-full border border-blue-100 flex items-center space-x-2">
           <RefreshCw size={14} className="text-blue-500 animate-spin-slow" />
@@ -201,11 +203,11 @@ const ProgressPage: React.FC = () => {
           </div>
         </div>
         <div className="bg-white p-4 rounded-xl border shadow-sm">
-          <p className="text-[10px] font-bold text-gray-400 uppercase mb-1">Rolling Steps</p>
-          <p className="text-xl font-bold">{chartData[chartData.length - 1]?.rollingSteps?.toLocaleString(undefined, { maximumFractionDigits: 0 }) || '---'}</p>
+          <p className="text-[10px] font-bold text-gray-400 uppercase mb-1">Avg Steps</p>
+          <p className="text-xl font-bold text-blue-600">{chartData[chartData.length - 1]?.rollingSteps?.toLocaleString(undefined, { maximumFractionDigits: 0 }) || '---'}</p>
         </div>
         <div className="bg-white p-4 rounded-xl border shadow-sm">
-          <p className="text-[10px] font-bold text-gray-400 uppercase mb-1">Rolling AZM</p>
+          <p className="text-[10px] font-bold text-gray-400 uppercase mb-1">Avg AZM</p>
           <p className="text-xl font-bold text-amber-600">{chartData[chartData.length - 1]?.rollingAzm?.toFixed(0) || '---'}</p>
         </div>
       </div>
@@ -241,7 +243,7 @@ const ProgressPage: React.FC = () => {
         <section className="bg-white p-6 rounded-2xl border shadow-sm">
           <h3 className="text-sm font-bold mb-6 flex items-center space-x-2 text-gray-900">
             <Flame size={18} className="text-orange-600" />
-            <span>Calorie Consumption vs Target</span>
+            <span>Daily Calories vs Target</span>
           </h3>
           <div className="h-64 w-full">
             <ResponsiveContainer width="100%" height="100%">
@@ -261,7 +263,7 @@ const ProgressPage: React.FC = () => {
         {/* Energy Balance (Deficit) */}
         <section className="bg-white p-6 rounded-2xl border shadow-sm lg:col-span-2">
           <h3 className="text-sm font-bold mb-6 flex items-center space-x-2 text-gray-900">
-            <Info size={18} className="text-emerald-600" />
+            <Zap size={18} className="text-emerald-600" />
             <span>Net Energy Balance (Deficit Trend)</span>
           </h3>
           <div className="h-64 w-full">
@@ -285,26 +287,41 @@ const ProgressPage: React.FC = () => {
           </div>
         </section>
 
-        {/* Activity Trends */}
-        <section className="bg-white p-6 rounded-2xl border shadow-sm lg:col-span-2">
-          <div className="flex justify-between items-center mb-6">
-            <h3 className="text-sm font-bold flex items-center space-x-2 text-gray-900">
-              <Footprints size={18} className="text-blue-500" />
-              <span>Activity Momentum (Steps & AZM)</span>
-            </h3>
-            <span className="text-[10px] font-bold text-gray-400 bg-gray-50 px-2 py-1 rounded-lg border">7-Day Rolling SMA</span>
-          </div>
+        {/* Steps Trend */}
+        <section className="bg-white p-6 rounded-2xl border shadow-sm">
+          <h3 className="text-sm font-bold mb-6 flex items-center space-x-2 text-gray-900">
+            <Footprints size={18} className="text-blue-500" />
+            <span>Rolling Steps Trend</span>
+          </h3>
           <div className="h-64 w-full">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={chartData}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
                 <XAxis dataKey="date" hide />
-                <YAxis yAxisId="left" tick={{ fontSize: 10, fill: '#3b82f6' }} axisLine={false} tickLine={false} orientation="left" />
-                <YAxis yAxisId="right" tick={{ fontSize: 10, fill: '#f59e0b' }} axisLine={false} tickLine={false} orientation="right" />
+                <YAxis tick={{ fontSize: 10, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
                 <Tooltip content={<CustomTooltip />} />
-                <Legend iconType="circle" wrapperStyle={{ fontSize: '10px', paddingTop: '10px' }} />
-                <Line yAxisId="left" type="monotone" dataKey="rollingSteps" name="Steps" stroke="#3b82f6" strokeWidth={3} dot={false} connectNulls />
-                <Line yAxisId="right" type="monotone" dataKey="rollingAzm" name="Active Zone Mins" stroke="#f59e0b" strokeWidth={3} dot={false} connectNulls />
+                <ReferenceLine y={stepTarget} stroke="#3b82f6" strokeDasharray="3 3" strokeOpacity={0.5} />
+                <Line type="monotone" dataKey="rollingSteps" name="7d Steps Avg" stroke="#3b82f6" strokeWidth={3} dot={false} connectNulls />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </section>
+
+        {/* AZM Trend */}
+        <section className="bg-white p-6 rounded-2xl border shadow-sm">
+          <h3 className="text-sm font-bold mb-6 flex items-center space-x-2 text-gray-900">
+            <Timer size={18} className="text-amber-500" />
+            <span>Rolling AZM Trend</span>
+          </h3>
+          <div className="h-64 w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={chartData}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
+                <XAxis dataKey="date" hide />
+                <YAxis tick={{ fontSize: 10, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
+                <Tooltip content={<CustomTooltip />} />
+                <ReferenceLine y={azmTarget} stroke="#f59e0b" strokeDasharray="3 3" strokeOpacity={0.5} />
+                <Line type="monotone" dataKey="rollingAzm" name="7d AZM Avg" stroke="#f59e0b" strokeWidth={3} dot={false} connectNulls />
               </LineChart>
             </ResponsiveContainer>
           </div>
@@ -313,15 +330,15 @@ const ProgressPage: React.FC = () => {
       </div>
 
       <div className="bg-gray-50 p-6 rounded-2xl border border-dashed flex items-start space-x-4">
-        <div className="bg-gray-200 p-2 rounded-lg">
-          <RefreshCw size={20} className="text-gray-500" />
+        <div className="bg-white p-3 rounded-xl border shadow-sm">
+          <RefreshCw size={20} className="text-blue-500" />
         </div>
         <div>
-          <h4 className="font-bold text-sm text-gray-900">Adaptive Calibrations</h4>
+          <h4 className="font-bold text-sm text-gray-900">Adaptive Insights</h4>
           <p className="text-xs text-gray-500 mt-1 leading-relaxed">
-            The charts above smooth out day-to-day noise to show your <strong>metabolic trend</strong>. 
+            The charts above reveal your <strong>metabolic momentum</strong>. 
             If your rolling deficit is consistent but weight isn't moving as planned, the coach uses this 
-            7-day average data to tweak your baseline.
+            trend data to update your baseline TDEE.
           </p>
         </div>
       </div>
