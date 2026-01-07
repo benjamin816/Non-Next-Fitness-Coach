@@ -1,11 +1,9 @@
-
 import React, { useState } from 'react';
-// Corrected import path for useStorage
 import { useStorage } from '../components/StorageProvider';
 import { UserProfile, GoalSettings, Sex, ActivityStyle, GoalMode } from '../types';
 import { DEFAULT_TIMEZONE } from '../constants';
 import { feetInchesToCm } from '../domain/calculators';
-import { z } from 'https://esm.sh/zod@^3.24.2';
+import { z } from 'zod';
 
 const profileSchema = z.object({
   age: z.number().min(16, "This app is for ages 16+."),
@@ -20,10 +18,10 @@ const OnboardingPage: React.FC<OnboardingPageProps> = ({ onComplete }) => {
   const storage = useStorage();
   const [step, setStep] = useState(1);
   const [sex, setSex] = useState<Sex>('male');
-  const [age, setAge] = useState(25); // Default updated to 25
+  const [age, setAge] = useState(25);
   const [heightFt, setHeightFt] = useState(5);
   const [heightIn, setHeightIn] = useState(9);
-  const [weight, setWeight] = useState(165); // Default updated to 165
+  const [weight, setWeight] = useState(165);
   const [mode, setMode] = useState<GoalMode>('fat-loss');
   const [rate, setRate] = useState(1.0);
   const [activity, setActivity] = useState<ActivityStyle>('standard');
