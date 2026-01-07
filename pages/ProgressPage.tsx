@@ -1,9 +1,11 @@
 
 import React, { useState, useEffect } from 'react';
-// Corrected import path for useStorage
 import { useStorage } from '../components/StorageProvider';
 import { DailyLog, UserProfile, GoalSettings, AdaptiveModel } from '../types';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
+import { 
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, 
+  ResponsiveContainer, AreaChart, Area, Legend, ReferenceLine 
+} from 'recharts';
 import { 
   calculateBMR, 
   calculateTDEEBase, 
@@ -12,7 +14,7 @@ import {
 } from '../domain/calculators';
 import { getPlanAchievedDelta } from '../domain/planAdherence';
 import { ACTIVITY_TARGETS } from '../constants';
-import { CheckCircle2, AlertCircle, RefreshCw, Info, ArrowUpRight, ArrowDownRight, Sparkles } from 'lucide-react';
+import { RefreshCw, Info, ArrowUpRight, ArrowDownRight, Sparkles, Flame, Footprints, Timer, TrendingDown } from 'lucide-react';
 
 const ProgressPage: React.FC = () => {
   const storage = useStorage();
@@ -38,7 +40,6 @@ const ProgressPage: React.FC = () => {
 
       // --- AUTOMATIC REALITY CHECK ---
       if (p && g && a && sortedLogs.length >= 14) {
-        const stepTarget = ACTIVITY_TARGETS[g.activityStyle].steps;
         const currentWeekLogs = sortedLogs.slice(-7);
         const prevWeekLogs = sortedLogs.slice(-14, -7);
 
@@ -51,23 +52,21 @@ const ProgressPage: React.FC = () => {
         const prevAvg = getAvgWeight(prevWeekLogs);
         const adherenceMet = currentWeekLogs.filter(lw => lw.calories > 0).length >= 5;
 
-        // Check if calibration is due (>= 7 days since last calibration or never calibrated)
         const lastCal = a.lastCalibrationDate ? new Date(a.lastCalibrationDate).getTime() : 0;
         const isDue = (Date.now() - lastCal) > (7 * 24 * 60 * 60 * 1000);
 
         if (currAvg !== null && prevAvg !== null && adherenceMet && isDue) {
-          const actualWeekChange = currAvg - prevAvg; // Positive = gain, Negative = loss
+          const actualWeekChange = currAvg - prevAvg;
           const plannedDailyDelta = getPlannedDailyDelta(g.mode, g.goalRate);
           const plannedWeekChange = (plannedDailyDelta * 7) / 3500;
           
           const gap = actualWeekChange - plannedWeekChange;
           let adjustment = 0;
 
-          // If gap > 0.15lb off target, adjust
           if (gap > 0.15) {
-            adjustment = -75; // Gaining too fast / losing too slow -> Calories DOWN
+            adjustment = -75;
           } else if (gap < -0.15) {
-            adjustment = 75; // Losing too fast / gaining too slow -> Calories UP
+            adjustment = 75;
           }
 
           if (adjustment !== 0) {
@@ -79,7 +78,7 @@ const ProgressPage: React.FC = () => {
             };
             await storage.setAdaptiveModel(updated);
             setAdaptive(updated);
-            setAutoUpdateMessage(`Coach Update: Calorie targets adjusted by ${adjustment > 0 ? '+' : ''}${adjustment}kcal based on your ${actualWeekChange.toFixed(2)}lb actual change vs ${plannedWeekChange.toFixed(2)}lb goal.`);
+            setAutoUpdateMessage(`Coach Update: Calorie targets adjusted by ${adjustment > 0 ? '+' : ''}${adjustment}kcal based on your ${actualWeekChange.toFixed(2)}lb actual change.`);
           }
         }
       }
@@ -97,8 +96,16 @@ const ProgressPage: React.FC = () => {
   const stepTarget = ACTIVITY_TARGETS[goals.activityStyle].steps;
   const azmTarget = ACTIVITY_TARGETS[goals.activityStyle].azm;
   const plannedDailyDelta = getPlannedDailyDelta(goals.mode, goals.goalRate);
-  
-  const chartData = logs.map(log => {
+
+  // Calculate Rolling Averages
+  const getRollingAvg = (array: any[], index: number, key: string, window: number = 7) => {
+    const start = Math.max(0, index - window + 1);
+    const subset = array.slice(start, index + 1);
+    const sum = subset.reduce((acc, curr) => acc + (curr[key] || 0), 0);
+    return subset.length > 0 ? sum / subset.length : null;
+  };
+
+  const chartData = logs.map((log, idx, arr) => {
     const weight = log.weightLb || undefined;
     const bmr = calculateBMR(profile, weight || profile.startingWeightLb);
     const tdeeBase = calculateTDEEBase(bmr, goals.activityStyle);
@@ -112,12 +119,25 @@ const ProgressPage: React.FC = () => {
       stepsTarget: stepTarget,
       azm: log.azm,
       azmTarget: azmTarget
-    });
+    }) || 0;
+
+    const entry = {
+      date: log.dateISO,
+      weight,
+      calories: log.calories > 0 ? log.calories : null,
+      target: calorieTarget,
+      delta: achievedDelta,
+      steps: log.steps,
+      azm: log.azm
+    };
 
     return {
-      date: log.dateISO,
-      weight: weight,
-      rawDelta: achievedDelta || 0,
+      ...entry,
+      rollingWeight: getRollingAvg(arr.map(l => ({ ...l, val: l.weightLb || null })), idx, 'val'),
+      rollingCals: getRollingAvg(arr.map(l => ({ ...l, val: l.calories || null })), idx, 'val'),
+      rollingDelta: getRollingAvg(arr.map(l => ({ ...l, val: achievedDelta })), idx, 'val'),
+      rollingSteps: getRollingAvg(arr.map(l => ({ ...l, val: l.steps || null })), idx, 'val'),
+      rollingAzm: getRollingAvg(arr.map(l => ({ ...l, val: l.azm || null })), idx, 'val'),
     };
   });
 
@@ -128,12 +148,29 @@ const ProgressPage: React.FC = () => {
   };
   const currAvg = getAvgWeight(currentWeekLogs);
 
+  const CustomTooltip = ({ active, payload, label }: any) => {
+    if (active && payload && payload.length) {
+      return (
+        <div className="bg-white p-3 border rounded-xl shadow-xl text-xs space-y-1">
+          <p className="font-bold text-gray-900 border-b pb-1 mb-1">{label}</p>
+          {payload.map((p: any, i: number) => (
+            <div key={i} className="flex justify-between gap-4">
+              <span style={{ color: p.color || p.stroke }} className="font-medium">{p.name}:</span>
+              <span className="font-mono font-bold text-gray-900">{Math.round(p.value)}</span>
+            </div>
+          ))}
+        </div>
+      );
+    }
+    return null;
+  };
+
   return (
     <div className="space-y-8 pb-10 animate-in fade-in duration-500">
       <header className="flex justify-between items-start">
         <div>
           <h2 className="text-2xl font-bold">Progress & Trends</h2>
-          <p className="text-gray-500">Your adaptive coach is tracking your metabolism.</p>
+          <p className="text-gray-500">Visualizing your 7-day rolling performance.</p>
         </div>
         <div className="bg-blue-50 px-3 py-1 rounded-full border border-blue-100 flex items-center space-x-2">
           <RefreshCw size={14} className="text-blue-500 animate-spin-slow" />
@@ -141,7 +178,6 @@ const ProgressPage: React.FC = () => {
         </div>
       </header>
 
-      {/* Automatic Update Notification */}
       {autoUpdateMessage && (
         <div className="bg-gradient-to-r from-blue-600 to-indigo-700 p-4 rounded-2xl text-white shadow-xl flex items-center space-x-4 animate-in slide-in-from-top duration-700">
           <div className="bg-white/20 p-2 rounded-full">
@@ -165,48 +201,127 @@ const ProgressPage: React.FC = () => {
           </div>
         </div>
         <div className="bg-white p-4 rounded-xl border shadow-sm">
-          <p className="text-[10px] font-bold text-gray-400 uppercase mb-1">Adherence</p>
-          <p className="text-xl font-bold">{currentWeekLogs.filter(l => l.calories > 0).length}/7 <span className="text-xs font-normal text-gray-400">days</span></p>
+          <p className="text-[10px] font-bold text-gray-400 uppercase mb-1">Rolling Steps</p>
+          <p className="text-xl font-bold">{chartData[chartData.length - 1]?.rollingSteps?.toLocaleString(undefined, { maximumFractionDigits: 0 }) || '---'}</p>
         </div>
         <div className="bg-white p-4 rounded-xl border shadow-sm">
-          <p className="text-[10px] font-bold text-gray-400 uppercase mb-1">Calibration</p>
-          <p className="text-xs font-bold text-gray-600 truncate mt-1">{adaptive.lastCalibrationDate ? new Date(adaptive.lastCalibrationDate).toLocaleDateString() : 'Pending'}</p>
+          <p className="text-[10px] font-bold text-gray-400 uppercase mb-1">Rolling AZM</p>
+          <p className="text-xl font-bold text-amber-600">{chartData[chartData.length - 1]?.rollingAzm?.toFixed(0) || '---'}</p>
         </div>
       </div>
 
-      {/* Weight Chart */}
-      <section className="bg-white p-6 rounded-2xl border shadow-sm">
-        <h3 className="text-lg font-bold mb-6 flex items-center space-x-2">
-          <Info size={18} className="text-gray-400" />
-          <span>Bodyweight Trend</span>
-        </h3>
-        <div className="h-64 w-full">
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={chartData}>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
-              <XAxis dataKey="date" hide />
-              <YAxis domain={['auto', 'auto']} tick={{ fontSize: 12, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
-              <Tooltip 
-                contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
-                labelStyle={{ fontWeight: 'bold' }}
-              />
-              <Line type="monotone" dataKey="weight" stroke="#2563eb" strokeWidth={4} dot={false} activeDot={{ r: 6, strokeWidth: 0 }} connectNulls />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-      </section>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        
+        {/* Weight Trend */}
+        <section className="bg-white p-6 rounded-2xl border shadow-sm">
+          <h3 className="text-sm font-bold mb-6 flex items-center space-x-2 text-gray-900">
+            <TrendingDown size={18} className="text-blue-600" />
+            <span>Bodyweight (Rolling)</span>
+          </h3>
+          <div className="h-64 w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={chartData}>
+                <defs>
+                  <linearGradient id="colorWeight" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.1}/>
+                    <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
+                <XAxis dataKey="date" hide />
+                <YAxis domain={['auto', 'auto']} tick={{ fontSize: 10, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
+                <Tooltip content={<CustomTooltip />} />
+                <Area type="monotone" dataKey="rollingWeight" name="Rolling Weight" stroke="#2563eb" strokeWidth={3} fillOpacity={1} fill="url(#colorWeight)" connectNulls />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        </section>
 
-      {/* Reality Check Disclaimer */}
+        {/* Energy Consumption Trend */}
+        <section className="bg-white p-6 rounded-2xl border shadow-sm">
+          <h3 className="text-sm font-bold mb-6 flex items-center space-x-2 text-gray-900">
+            <Flame size={18} className="text-orange-600" />
+            <span>Calorie Consumption vs Target</span>
+          </h3>
+          <div className="h-64 w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={chartData}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
+                <XAxis dataKey="date" hide />
+                <YAxis tick={{ fontSize: 10, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
+                <Tooltip content={<CustomTooltip />} />
+                <Legend iconType="circle" wrapperStyle={{ fontSize: '10px', paddingTop: '10px' }} />
+                <Line type="monotone" dataKey="rollingCals" name="Rolling Intake" stroke="#f97316" strokeWidth={3} dot={false} connectNulls />
+                <Line type="stepAfter" dataKey="target" name="Daily Target" stroke="#94a3b8" strokeWidth={2} strokeDasharray="5 5" dot={false} />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </section>
+
+        {/* Energy Balance (Deficit) */}
+        <section className="bg-white p-6 rounded-2xl border shadow-sm lg:col-span-2">
+          <h3 className="text-sm font-bold mb-6 flex items-center space-x-2 text-gray-900">
+            <Info size={18} className="text-emerald-600" />
+            <span>Net Energy Balance (Deficit Trend)</span>
+          </h3>
+          <div className="h-64 w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={chartData}>
+                <defs>
+                  <linearGradient id="colorDelta" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#10b981" stopOpacity={0.2}/>
+                    <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
+                <XAxis dataKey="date" hide />
+                <YAxis tick={{ fontSize: 10, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
+                <Tooltip content={<CustomTooltip />} />
+                <ReferenceLine y={0} stroke="#e2e8f0" strokeWidth={2} />
+                <ReferenceLine y={plannedDailyDelta} label={{ value: 'Plan', position: 'right', fill: '#94a3b8', fontSize: 10 }} stroke="#94a3b8" strokeDasharray="3 3" />
+                <Area type="monotone" dataKey="rollingDelta" name="Rolling Deficit" stroke="#10b981" strokeWidth={3} fillOpacity={1} fill="url(#colorDelta)" connectNulls />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        </section>
+
+        {/* Activity Trends */}
+        <section className="bg-white p-6 rounded-2xl border shadow-sm lg:col-span-2">
+          <div className="flex justify-between items-center mb-6">
+            <h3 className="text-sm font-bold flex items-center space-x-2 text-gray-900">
+              <Footprints size={18} className="text-blue-500" />
+              <span>Activity Momentum (Steps & AZM)</span>
+            </h3>
+            <span className="text-[10px] font-bold text-gray-400 bg-gray-50 px-2 py-1 rounded-lg border">7-Day Rolling SMA</span>
+          </div>
+          <div className="h-64 w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={chartData}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
+                <XAxis dataKey="date" hide />
+                <YAxis yAxisId="left" tick={{ fontSize: 10, fill: '#3b82f6' }} axisLine={false} tickLine={false} orientation="left" />
+                <YAxis yAxisId="right" tick={{ fontSize: 10, fill: '#f59e0b' }} axisLine={false} tickLine={false} orientation="right" />
+                <Tooltip content={<CustomTooltip />} />
+                <Legend iconType="circle" wrapperStyle={{ fontSize: '10px', paddingTop: '10px' }} />
+                <Line yAxisId="left" type="monotone" dataKey="rollingSteps" name="Steps" stroke="#3b82f6" strokeWidth={3} dot={false} connectNulls />
+                <Line yAxisId="right" type="monotone" dataKey="rollingAzm" name="Active Zone Mins" stroke="#f59e0b" strokeWidth={3} dot={false} connectNulls />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </section>
+
+      </div>
+
       <div className="bg-gray-50 p-6 rounded-2xl border border-dashed flex items-start space-x-4">
         <div className="bg-gray-200 p-2 rounded-lg">
           <RefreshCw size={20} className="text-gray-500" />
         </div>
         <div>
-          <h4 className="font-bold text-sm">How automatic adjustments work</h4>
+          <h4 className="font-bold text-sm text-gray-900">Adaptive Calibrations</h4>
           <p className="text-xs text-gray-500 mt-1 leading-relaxed">
-            Every 7 days, if you've tracked calories at least 5 times and weight 4 times, the coach compares your 
-            actual weight change to your goal. If they don't match, it automatically adjusts your calorie target by 
-            75kcal to keep you on track.
+            The charts above smooth out day-to-day noise to show your <strong>metabolic trend</strong>. 
+            If your rolling deficit is consistent but weight isn't moving as planned, the coach uses this 
+            7-day average data to tweak your baseline.
           </p>
         </div>
       </div>
