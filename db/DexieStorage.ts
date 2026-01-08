@@ -84,6 +84,10 @@ export class LocalIndexedDbProvider implements StorageProvider {
     await db.dailyLogs.put(log);
   }
 
+  async deleteDailyLog(date: string): Promise<void> {
+    await db.dailyLogs.delete(date);
+  }
+
   async resetAllData(): Promise<void> {
     await Promise.all([
       db.userProfile.clear(),

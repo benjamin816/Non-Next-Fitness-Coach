@@ -111,6 +111,7 @@ export interface StorageProvider {
   getDailyLogs(limit?: number): Promise<DailyLog[]>;
   getDailyLogByDate(date: string): Promise<DailyLog | null>;
   upsertDailyLog(log: DailyLog): Promise<void>;
+  deleteDailyLog(date: string): Promise<void>;
   resetAllData(): Promise<void>;
   // Programs & Lifting
   getPrograms(): Promise<Program[]>;
