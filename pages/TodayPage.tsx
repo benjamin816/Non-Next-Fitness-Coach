@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useStorage } from '../components/StorageProvider';
 import { DailyLog, UserProfile, GoalSettings, AdaptiveModel, WorkoutSession } from '../types';
 import { 
@@ -29,13 +29,39 @@ const TodayPage: React.FC = () => {
   const [saving, setSaving] = useState(false);
   
   // Navigation & History State
-  const todayStr = new Date().toISOString().split('T')[0];
+  const todayStr = useMemo(() => new Date().toISOString().split('T')[0], []);
   const [viewingDateISO, setViewingDateISO] = useState(todayStr);
+  const [availableDates, setAvailableDates] = useState<string[]>([todayStr]);
   const [isEditMode, setIsEditMode] = useState(false);
-  const [deleteStep, setDeleteStep] = useState(0); // 0: Idle, 1: Confirming
+  const [deleteStep, setDeleteStep] = useState(0); 
 
   // Temporary edit buffer
   const [editBuffer, setEditBuffer] = useState<DailyLog | null>(null);
+
+  const fetchAvailableDates = async () => {
+    const allLogs = await storage.getDailyLogs(30);
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    const sevenDaysAgoISO = sevenDaysAgo.toISOString().split('T')[0];
+
+    // Filter for logs within 7 days that have data, and always include Today
+    const validPastDates = allLogs
+      .filter(l => {
+        const hasData = (l.calories > 0) || (l.weightLb !== undefined && l.weightLb > 0);
+        const isRecent = l.dateISO >= sevenDaysAgoISO && l.dateISO < todayStr;
+        return hasData && isRecent;
+      })
+      .map(l => l.dateISO);
+
+    // Combine, sort unique
+    const combined = Array.from(new Set([...validPastDates, todayStr])).sort();
+    setAvailableDates(combined);
+
+    // If current viewing date is no longer in available dates (e.g. after a delete), move to today
+    if (!combined.includes(viewingDateISO)) {
+      setViewingDateISO(todayStr);
+    }
+  };
 
   useEffect(() => {
     const fetchData = async () => {
@@ -83,6 +109,8 @@ const TodayPage: React.FC = () => {
         historicalAvg = last7WeightLogs.reduce((sum, curr) => sum + (curr.weightLb || 0), 0) / last7WeightLogs.length;
       }
       setHistoricalAvgWeight(historicalAvg);
+      
+      await fetchAvailableDates();
       setDataReady(true);
       setIsEditMode(false);
       setDeleteStep(0);
@@ -101,9 +129,6 @@ const TodayPage: React.FC = () => {
   const stepTarget = ACTIVITY_TARGETS[goals.activityStyle].steps;
   const azmTarget = ACTIVITY_TARGETS[goals.activityStyle].azm;
 
-  const workoutTargetMap = { 'low-cardio': 1, 'standard': 2, 'high-activity': 3 };
-  const workoutGoal = workoutTargetMap[goals.activityStyle];
-
   const currentDisplayedLog = isEditMode ? editBuffer : log;
 
   const achievedDelta = getPlanAchievedDelta({
@@ -117,26 +142,20 @@ const TodayPage: React.FC = () => {
     azmTarget: azmTarget
   });
 
-  const changeDate = (offset: number) => {
-    const d = new Date(viewingDateISO);
-    d.setDate(d.getDate() + offset);
-    const newDateISO = d.toISOString().split('T')[0];
-    
-    // Constraint: Can't go past today, and only up to 7 days back
-    const todayDate = new Date(todayStr);
-    const diffTime = Math.abs(todayDate.getTime() - d.getTime());
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    
-    if (d > todayDate) return;
-    if (diffDays > 7 && d < todayDate) return;
+  const currentIndex = availableDates.indexOf(viewingDateISO);
+  const hasPrev = currentIndex > 0;
+  const hasNext = currentIndex < availableDates.length - 1;
 
-    setViewingDateISO(newDateISO);
+  const navigateTo = (direction: 'prev' | 'next') => {
+    const nextIdx = direction === 'prev' ? currentIndex - 1 : currentIndex + 1;
+    if (availableDates[nextIdx]) {
+      setViewingDateISO(availableDates[nextIdx]);
+    }
   };
 
   const handleUpdate = (updates: Partial<DailyLog>) => {
     const updated = { ...editBuffer, ...updates, updatedAt: Date.now() };
     setEditBuffer(updated);
-    // If it's today, we auto-save for convenience
     if (isToday) {
       autoSave(updated);
     }
@@ -146,6 +165,8 @@ const TodayPage: React.FC = () => {
     setSaving(true);
     await storage.upsertDailyLog(updated);
     setLog(updated);
+    // After saving, we might have made a previously "invalid" log "valid" or vice-versa
+    await fetchAvailableDates();
     setTimeout(() => setSaving(false), 500);
   };
 
@@ -154,6 +175,7 @@ const TodayPage: React.FC = () => {
     await storage.upsertDailyLog(editBuffer);
     setLog(editBuffer);
     setIsEditMode(false);
+    await fetchAvailableDates();
     setTimeout(() => setSaving(false), 500);
   };
 
@@ -167,17 +189,7 @@ const TodayPage: React.FC = () => {
       setDeleteStep(1);
     } else {
       await storage.deleteDailyLog(viewingDateISO);
-      const emptyLog = {
-        dateISO: viewingDateISO,
-        calories: 0,
-        steps: 0,
-        azm: 0,
-        workoutDone: false,
-        createdAt: Date.now(),
-        updatedAt: Date.now()
-      };
-      setLog(emptyLog);
-      setEditBuffer(emptyLog);
+      await fetchAvailableDates(); // This will auto-navigate away if current date is deleted
       setDeleteStep(0);
       setIsEditMode(false);
     }
@@ -195,7 +207,8 @@ const TodayPage: React.FC = () => {
     targets: { calories: calorieTarget, steps: stepTarget, azm: azmTarget }
   };
 
-  const formattedDate = new Date(viewingDateISO).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  const formattedDate = new Date(viewingDateISO).toLocaleDateString('en-US', { month: 'short', day: 'numeric', weekday: 'short' });
+
   const isGoalReached = () => {
     if (historicalAvgWeight <= 0) return false;
     if (goals.mode === 'fat-loss' && goals.targetWeightLb) return historicalAvgWeight <= goals.targetWeightLb;
@@ -209,25 +222,30 @@ const TodayPage: React.FC = () => {
       <header className="flex flex-col gap-2">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-2">
-            <button 
-              onClick={() => changeDate(-1)} 
-              className="p-2 bg-white border rounded-full shadow-sm hover:bg-gray-50 transition active:scale-90"
-              title="Previous Day"
-            >
-              <ChevronLeft size={20} />
-            </button>
-            <div className="flex flex-col items-center min-w-[120px]">
+            {hasPrev ? (
+              <button 
+                onClick={() => navigateTo('prev')} 
+                className="p-2 bg-white border rounded-full shadow-sm hover:bg-gray-50 transition active:scale-90"
+                title="Previous Day with Data"
+              >
+                <ChevronLeft size={20} />
+              </button>
+            ) : <div className="w-10" />}
+            
+            <div className="flex flex-col items-center min-w-[140px]">
               <h2 className="text-xl font-bold">{isToday ? "Today" : formattedDate}</h2>
               <span className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">{viewingDateISO}</span>
             </div>
-            <button 
-              onClick={() => changeDate(1)} 
-              disabled={isToday}
-              className={`p-2 border rounded-full shadow-sm transition active:scale-90 ${isToday ? 'bg-gray-100 text-gray-300' : 'bg-white text-gray-900 hover:bg-gray-50'}`}
-              title="Next Day"
-            >
-              <ChevronRight size={20} />
-            </button>
+
+            {hasNext ? (
+              <button 
+                onClick={() => navigateTo('next')} 
+                className="p-2 bg-white border rounded-full shadow-sm hover:bg-gray-50 transition active:scale-90"
+                title="Next Day with Data"
+              >
+                <ChevronRight size={20} />
+              </button>
+            ) : <div className="w-10" />}
           </div>
           
           {!isToday && !isEditMode && (
